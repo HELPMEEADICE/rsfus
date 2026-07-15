@@ -1,5 +1,5 @@
 [workspace]
-members = ["rust/rufus-core"]
+members = ["rust/rufus-core", "rust/rufus-ffi"]
 resolver = "3"
 
 [workspace.package]
@@ -10,3 +10,9 @@ rust-version = "1.85"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

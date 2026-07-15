@@ -1,7 +1,11 @@
 //! Platform-independent safety rules for Rufus operations.
 
-use std::error::Error;
-use std::fmt;
+#![no_std]
+
+use core::{error::Error, fmt};
+
+#[cfg(test)]
+extern crate std;
 
 /// Rufus currently rejects drives smaller than 8 MiB.
 pub const MIN_TARGET_SIZE: u64 = 8 * 1024 * 1024;
@@ -31,8 +35,18 @@ impl PhysicalDiskNumber {
     }
 
     #[must_use]
-    pub fn device_path(self) -> String {
-        format!(r"\\.\PhysicalDrive{}", self.0)
+    pub const fn device_path(self) -> PhysicalDrivePath {
+        PhysicalDrivePath(self)
+    }
+}
+
+/// Display-only form of a Windows `\\.\PhysicalDriveN` path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PhysicalDrivePath(PhysicalDiskNumber);
+
+impl fmt::Display for PhysicalDrivePath {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, r"\\.\PhysicalDrive{}", self.0.get())
     }
 }
 
@@ -103,23 +117,22 @@ impl Error for DriveIndexError {}
 
 /// A snapshot of the properties used to identify a physical target disk.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TargetDisk {
+pub struct TargetDisk<'id> {
     device_number: PhysicalDiskNumber,
-    device_instance_id: String,
+    device_instance_id: &'id str,
     disk_size: u64,
     sector_size: u32,
     contains_system_volume: bool,
 }
 
-impl TargetDisk {
+impl<'id> TargetDisk<'id> {
     pub fn new(
         device_number: PhysicalDiskNumber,
-        device_instance_id: impl Into<String>,
+        device_instance_id: &'id str,
         disk_size: u64,
         sector_size: u32,
         contains_system_volume: bool,
     ) -> Result<Self, TargetDiskError> {
-        let device_instance_id = device_instance_id.into();
         if device_instance_id.trim().is_empty() {
             return Err(TargetDiskError::MissingInstanceId);
         }
@@ -142,8 +155,8 @@ impl TargetDisk {
     }
 
     #[must_use]
-    pub fn device_instance_id(&self) -> &str {
-        &self.device_instance_id
+    pub const fn device_instance_id(&self) -> &'id str {
+        self.device_instance_id
     }
 
     #[must_use]
@@ -161,7 +174,7 @@ impl TargetDisk {
         self.contains_system_volume
     }
 
-    fn has_same_identity(&self, other: &Self) -> bool {
+    fn has_same_identity(&self, other: &TargetDisk<'_>) -> bool {
         self.device_number == other.device_number
             && self.device_instance_id == other.device_instance_id
             && self.disk_size == other.disk_size
@@ -210,14 +223,14 @@ impl SourceImage {
 
 /// An immutable plan created before Rufus asks the user for final confirmation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WritePlan {
-    target: TargetDisk,
+pub struct WritePlan<'id> {
+    target: TargetDisk<'id>,
     source: Option<SourceImage>,
 }
 
-impl WritePlan {
+impl<'id> WritePlan<'id> {
     #[must_use]
-    pub const fn new(target: TargetDisk, source: Option<SourceImage>) -> Self {
+    pub const fn new(target: TargetDisk<'id>, source: Option<SourceImage>) -> Self {
         Self { target, source }
     }
 }
@@ -227,13 +240,13 @@ impl WritePlan {
 /// The private fields prevent callers from constructing this value without
 /// passing [`authorize_write`].
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct WriteAuthorization {
-    target: TargetDisk,
+pub struct WriteAuthorization<'id> {
+    target: TargetDisk<'id>,
 }
 
-impl WriteAuthorization {
+impl<'id> WriteAuthorization<'id> {
     #[must_use]
-    pub const fn target(&self) -> &TargetDisk {
+    pub const fn target(&self) -> &TargetDisk<'id> {
         &self.target
     }
 }
@@ -266,11 +279,11 @@ impl fmt::Display for WriteRejection {
 impl Error for WriteRejection {}
 
 /// Revalidate all safety properties immediately before destructive disk I/O.
-pub fn authorize_write(
-    plan: &WritePlan,
-    observed_target: &TargetDisk,
+pub fn authorize_write<'id>(
+    plan: &WritePlan<'_>,
+    observed_target: &TargetDisk<'id>,
     user_confirmed: bool,
-) -> Result<WriteAuthorization, WriteRejection> {
+) -> Result<WriteAuthorization<'id>, WriteRejection> {
     if !plan.target.has_same_identity(observed_target) {
         return Err(WriteRejection::TargetChanged);
     }
@@ -309,7 +322,7 @@ mod tests {
 
     const DISK_SIZE: u64 = 16 * 1024 * 1024;
 
-    fn disk() -> TargetDisk {
+    fn disk() -> TargetDisk<'static> {
         TargetDisk::new(
             PhysicalDiskNumber::new(7),
             "USB\\VID_1234&PID_5678\\SERIAL",
@@ -320,7 +333,7 @@ mod tests {
         .expect("fixture must be valid")
     }
 
-    fn plan(source: Option<SourceImage>) -> WritePlan {
+    fn plan(source: Option<SourceImage>) -> WritePlan<'static> {
         WritePlan::new(disk(), source)
     }
 
@@ -502,7 +515,7 @@ mod tests {
     #[test]
     fn formats_the_existing_windows_physical_drive_path() {
         assert_eq!(
-            PhysicalDiskNumber::new(7).device_path(),
+            std::format!("{}", PhysicalDiskNumber::new(7).device_path()),
             r"\\.\PhysicalDrive7"
         );
     }
