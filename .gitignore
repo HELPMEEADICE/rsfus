@@ -18,6 +18,7 @@
 *.lib
 *.lo
 *.lock
+!/Cargo.lock
 *.log
 *.mac
 *.mo
@@ -64,5 +65,6 @@ embedded.loc
 /res/loc/pollock/bin
 /res/loc/pollock/obj
 /rufus_files
+/target
 stamp-h1
 /.vs/rufus
