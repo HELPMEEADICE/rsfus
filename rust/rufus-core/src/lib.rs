@@ -9,6 +9,9 @@ pub const MIN_TARGET_SIZE: u64 = 8 * 1024 * 1024;
 /// Rufus permits this margin when comparing an image with its target.
 pub const IMAGE_FOOTER_MARGIN: u64 = 4 * 1024;
 
+const UI_DRIVE_INDEX_OFFSET: u32 = 0x80;
+const MAX_DRIVES: u32 = 0x40;
+
 /// The unmodified disk number returned by Windows for `PhysicalDriveN`.
 ///
 /// This is deliberately distinct from the C UI's `DRIVE_INDEX_MIN`-offset
@@ -26,7 +29,77 @@ impl PhysicalDiskNumber {
     pub const fn get(self) -> u32 {
         self.0
     }
+
+    #[must_use]
+    pub fn device_path(self) -> String {
+        format!(r"\\.\PhysicalDrive{}", self.0)
+    }
 }
+
+/// A physical disk number encoded for storage in the existing C UI controls.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct UiDriveIndex(u32);
+
+impl UiDriveIndex {
+    #[must_use]
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+}
+
+impl TryFrom<u32> for UiDriveIndex {
+    type Error = DriveIndexError;
+
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if (UI_DRIVE_INDEX_OFFSET..UI_DRIVE_INDEX_OFFSET + MAX_DRIVES).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(DriveIndexError::InvalidUiIndex(value))
+        }
+    }
+}
+
+impl TryFrom<PhysicalDiskNumber> for UiDriveIndex {
+    type Error = DriveIndexError;
+
+    fn try_from(value: PhysicalDiskNumber) -> Result<Self, Self::Error> {
+        if value.0 < MAX_DRIVES {
+            Ok(Self(value.0 + UI_DRIVE_INDEX_OFFSET))
+        } else {
+            Err(DriveIndexError::UnsupportedPhysicalDisk(value.0))
+        }
+    }
+}
+
+impl From<UiDriveIndex> for PhysicalDiskNumber {
+    fn from(value: UiDriveIndex) -> Self {
+        Self(value.0 - UI_DRIVE_INDEX_OFFSET)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DriveIndexError {
+    InvalidUiIndex(u32),
+    UnsupportedPhysicalDisk(u32),
+}
+
+impl fmt::Display for DriveIndexError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidUiIndex(value) => {
+                write!(formatter, "invalid Rufus UI drive index: {value}")
+            }
+            Self::UnsupportedPhysicalDisk(value) => {
+                write!(
+                    formatter,
+                    "physical disk number is outside Rufus range: {value}"
+                )
+            }
+        }
+    }
+}
+
+impl Error for DriveIndexError {}
 
 /// A snapshot of the properties used to identify a physical target disk.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -393,6 +466,44 @@ mod tests {
         assert_eq!(
             TargetDisk::new(PhysicalDiskNumber::new(7), "INSTANCE", DISK_SIZE, 0, false),
             Err(TargetDiskError::InvalidSectorSize)
+        );
+    }
+
+    #[test]
+    fn converts_all_supported_physical_disk_numbers_to_ui_indexes() {
+        for physical_number in 0..MAX_DRIVES {
+            let physical = PhysicalDiskNumber::new(physical_number);
+            let ui_index = UiDriveIndex::try_from(physical).expect("supported disk must convert");
+
+            assert_eq!(ui_index.get(), UI_DRIVE_INDEX_OFFSET + physical_number);
+            assert_eq!(UiDriveIndex::try_from(ui_index.get()), Ok(ui_index));
+            assert_eq!(PhysicalDiskNumber::from(ui_index), physical);
+        }
+    }
+
+    #[test]
+    fn rejects_values_outside_the_existing_drive_table() {
+        assert_eq!(
+            UiDriveIndex::try_from(UI_DRIVE_INDEX_OFFSET - 1),
+            Err(DriveIndexError::InvalidUiIndex(UI_DRIVE_INDEX_OFFSET - 1))
+        );
+        assert_eq!(
+            UiDriveIndex::try_from(UI_DRIVE_INDEX_OFFSET + MAX_DRIVES),
+            Err(DriveIndexError::InvalidUiIndex(
+                UI_DRIVE_INDEX_OFFSET + MAX_DRIVES
+            ))
+        );
+        assert_eq!(
+            UiDriveIndex::try_from(PhysicalDiskNumber::new(MAX_DRIVES)),
+            Err(DriveIndexError::UnsupportedPhysicalDisk(MAX_DRIVES))
+        );
+    }
+
+    #[test]
+    fn formats_the_existing_windows_physical_drive_path() {
+        assert_eq!(
+            PhysicalDiskNumber::new(7).device_path(),
+            r"\\.\PhysicalDrive7"
         );
     }
 }
