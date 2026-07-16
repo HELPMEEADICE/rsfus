@@ -6,8 +6,9 @@ use core::ffi::c_char;
 use core::slice;
 
 use rufus_core::{
-    IMAGE_FOOTER_MARGIN, MIN_TARGET_SIZE, PHYSICAL_DRIVE_PATH_CAPACITY, PhysicalDiskNumber,
-    UiDriveIndex, image_fits_target, is_drive_large_enough,
+    DestructiveWritePreflight, IMAGE_FOOTER_MARGIN, MIN_TARGET_SIZE, PHYSICAL_DRIVE_PATH_CAPACITY,
+    PhysicalDiskNumber, UiDriveIndex, image_fits_target, is_drive_large_enough,
+    preflight_destructive_write,
 };
 
 pub const INVALID_PHYSICAL_DRIVE: i32 = -1;
@@ -15,6 +16,10 @@ pub const INVALID_UI_DRIVE_INDEX: i32 = -1;
 pub const PHYSICAL_DRIVE_PATH_CAPACITY_C: usize = PHYSICAL_DRIVE_PATH_CAPACITY;
 pub const MIN_TARGET_SIZE_C: u64 = MIN_TARGET_SIZE;
 pub const IMAGE_FOOTER_MARGIN_C: u64 = IMAGE_FOOTER_MARGIN;
+pub const PREFLIGHT_OK: i32 = 0;
+pub const PREFLIGHT_INVALID_UI_INDEX: i32 = 1;
+pub const PREFLIGHT_TARGET_TOO_SMALL: i32 = 2;
+pub const PREFLIGHT_IMAGE_TOO_LARGE: i32 = 3;
 
 #[allow(
     unsafe_code,
@@ -101,6 +106,34 @@ pub extern "C" fn rufus_is_drive_large_enough(disk_size: u64) -> i32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn rufus_image_fits_target(projected_size: u64, disk_size: u64) -> i32 {
     i32::from(image_fits_target(projected_size, disk_size))
+}
+
+/// Final safety preflight immediately before destructive disk I/O.
+///
+/// When `check_image` is non-zero, `projected_size` is validated against
+/// `disk_size` using the existing VHD footer margin.
+#[allow(
+    unsafe_code,
+    reason = "the symbol must have a stable name for the C linker"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_preflight_destructive_write(
+    ui_drive_index: u32,
+    disk_size: u64,
+    check_image: i32,
+    projected_size: u64,
+) -> i32 {
+    let projected = if check_image != 0 {
+        Some(projected_size)
+    } else {
+        None
+    };
+    match preflight_destructive_write(ui_drive_index, disk_size, projected) {
+        DestructiveWritePreflight::Ok => PREFLIGHT_OK,
+        DestructiveWritePreflight::InvalidUiIndex => PREFLIGHT_INVALID_UI_INDEX,
+        DestructiveWritePreflight::TargetTooSmall => PREFLIGHT_TARGET_TOO_SMALL,
+        DestructiveWritePreflight::ImageTooLarge => PREFLIGHT_IMAGE_TOO_LARGE,
+    }
 }
 
 #[cfg(not(test))]
@@ -233,6 +266,27 @@ mod tests {
         assert_eq!(
             rufus_image_fits_target(disk + IMAGE_FOOTER_MARGIN_C + 1, disk),
             0
+        );
+    }
+
+    #[test]
+    fn preflights_destructive_writes_for_c_callers() {
+        let disk = 16 * 1024 * 1024;
+        assert_eq!(
+            rufus_preflight_destructive_write(0x87, disk, 1, disk),
+            PREFLIGHT_OK
+        );
+        assert_eq!(
+            rufus_preflight_destructive_write(0x7f, disk, 0, 0),
+            PREFLIGHT_INVALID_UI_INDEX
+        );
+        assert_eq!(
+            rufus_preflight_destructive_write(0x87, MIN_TARGET_SIZE_C - 1, 0, 0),
+            PREFLIGHT_TARGET_TOO_SMALL
+        );
+        assert_eq!(
+            rufus_preflight_destructive_write(0x87, disk, 1, disk + IMAGE_FOOTER_MARGIN_C + 1),
+            PREFLIGHT_IMAGE_TOO_LARGE
         );
     }
 }

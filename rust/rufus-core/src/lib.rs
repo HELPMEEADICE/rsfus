@@ -25,6 +25,34 @@ pub const fn image_fits_target(projected_size: u64, disk_size: u64) -> bool {
     projected_size <= disk_size.saturating_add(IMAGE_FOOTER_MARGIN)
 }
 
+/// Lightweight preflight used immediately before destructive disk I/O.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DestructiveWritePreflight {
+    Ok,
+    InvalidUiIndex,
+    TargetTooSmall,
+    ImageTooLarge,
+}
+
+/// Re-check the UI index, minimum size, and optional image fit before writes.
+#[must_use]
+pub fn preflight_destructive_write(
+    ui_drive_index: u32,
+    disk_size: u64,
+    projected_size: Option<u64>,
+) -> DestructiveWritePreflight {
+    if UiDriveIndex::try_from(ui_drive_index).is_err() {
+        return DestructiveWritePreflight::InvalidUiIndex;
+    }
+    if !is_drive_large_enough(disk_size) {
+        return DestructiveWritePreflight::TargetTooSmall;
+    }
+    if projected_size.is_some_and(|size| !image_fits_target(size, disk_size)) {
+        return DestructiveWritePreflight::ImageTooLarge;
+    }
+    DestructiveWritePreflight::Ok
+}
+
 const UI_DRIVE_INDEX_OFFSET: u32 = 0x80;
 const MAX_DRIVES: u32 = 0x40;
 
@@ -582,6 +610,26 @@ mod tests {
             DISK_SIZE + IMAGE_FOOTER_MARGIN + 1,
             DISK_SIZE
         ));
+    }
+
+    #[test]
+    fn preflights_destructive_writes_with_the_existing_rules() {
+        assert_eq!(
+            preflight_destructive_write(0x87, DISK_SIZE, Some(DISK_SIZE)),
+            DestructiveWritePreflight::Ok
+        );
+        assert_eq!(
+            preflight_destructive_write(0x7f, DISK_SIZE, None),
+            DestructiveWritePreflight::InvalidUiIndex
+        );
+        assert_eq!(
+            preflight_destructive_write(0x87, MIN_TARGET_SIZE - 1, None),
+            DestructiveWritePreflight::TargetTooSmall
+        );
+        assert_eq!(
+            preflight_destructive_write(0x87, DISK_SIZE, Some(DISK_SIZE + IMAGE_FOOTER_MARGIN + 1)),
+            DestructiveWritePreflight::ImageTooLarge
+        );
     }
 
     #[test]

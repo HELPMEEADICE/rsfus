@@ -43,6 +43,7 @@
 #include "winio.h"
 #include "msapi_utf8.h"
 #include "localization.h"
+#include "rufus_ffi.h"
 
 #include "br.h"
 #include "vhd.h"
@@ -1501,6 +1502,18 @@ DWORD WINAPI FormatThread(void* param)
 		actual_lock_drive = FALSE;
 	// Fixed drives + ext2/ext3 don't play nice and require the same handling as ESPs
 	write_as_ext = IS_EXT(fs_type) && (GetDriveTypeFromIndex(DriveIndex) == DRIVE_FIXED);
+
+	// Final Rust-backed safety preflight before any destructive I/O.
+	{
+		int32_t check_image = ((boot_type == BT_IMAGE) && (img_report.projected_size > 0)) ? 1 : 0;
+		int32_t preflight = rufus_preflight_destructive_write(DriveIndex,
+			(uint64_t)SelectedDrive.DiskSize, check_image, img_report.projected_size);
+		if (preflight != RUFUS_PREFLIGHT_OK) {
+			uprintf("Destructive write preflight failed: %d", preflight);
+			ErrorStatus = RUFUS_ERROR(ERROR_INVALID_PARAMETER);
+			goto out;
+		}
+	}
 
 	PrintInfoDebug(0, MSG_225);
 	hPhysicalDrive = GetPhysicalHandle(DriveIndex, actual_lock_drive, FALSE, !actual_lock_drive);

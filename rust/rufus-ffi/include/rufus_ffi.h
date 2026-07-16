@@ -14,6 +14,10 @@ extern "C" {
 #define RUFUS_PHYSICAL_DRIVE_PATH_CAPACITY 28
 #define RUFUS_MIN_TARGET_SIZE (8ULL * 1024ULL * 1024ULL)
 #define RUFUS_IMAGE_FOOTER_MARGIN (4ULL * 1024ULL)
+#define RUFUS_PREFLIGHT_OK 0
+#define RUFUS_PREFLIGHT_INVALID_UI_INDEX 1
+#define RUFUS_PREFLIGHT_TARGET_TOO_SMALL 2
+#define RUFUS_PREFLIGHT_IMAGE_TOO_LARGE 3
 
 int32_t rufus_decode_ui_drive_index(uint32_t ui_drive_index);
 int32_t rufus_encode_ui_drive_index(uint32_t physical_disk_number);
@@ -22,6 +26,8 @@ int32_t rufus_format_physical_drive_path(uint32_t physical_disk_number,
 	char* buffer, size_t buffer_len);
 int32_t rufus_is_drive_large_enough(uint64_t disk_size);
 int32_t rufus_image_fits_target(uint64_t projected_size, uint64_t disk_size);
+int32_t rufus_preflight_destructive_write(uint32_t ui_drive_index,
+	uint64_t disk_size, int32_t check_image, uint64_t projected_size);
 
 #ifdef __cplusplus
 }
