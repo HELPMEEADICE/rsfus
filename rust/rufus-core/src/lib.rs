@@ -44,6 +44,42 @@ impl PhysicalDiskNumber {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PhysicalDrivePath(PhysicalDiskNumber);
 
+/// Bytes needed for `\\.\PhysicalDrive` + max `u32` digits + NUL.
+pub const PHYSICAL_DRIVE_PATH_CAPACITY: usize = 28;
+
+impl PhysicalDrivePath {
+    /// Write a NUL-terminated `\\.\PhysicalDriveN` path into `buffer`.
+    ///
+    /// Returns the number of path bytes written, excluding the trailing NUL.
+    pub fn write_cstr(self, buffer: &mut [u8]) -> Option<usize> {
+        const PREFIX: &[u8] = br"\\.\PhysicalDrive";
+
+        let mut digits = [0u8; 10];
+        let mut digit_count = 0usize;
+        let mut value = self.0.get();
+        loop {
+            digits[digit_count] = b'0' + (value % 10) as u8;
+            digit_count += 1;
+            value /= 10;
+            if value == 0 {
+                break;
+            }
+        }
+
+        let path_len = PREFIX.len() + digit_count;
+        if buffer.len() < path_len + 1 {
+            return None;
+        }
+
+        buffer[..PREFIX.len()].copy_from_slice(PREFIX);
+        for index in 0..digit_count {
+            buffer[PREFIX.len() + index] = digits[digit_count - 1 - index];
+        }
+        buffer[path_len] = 0;
+        Some(path_len)
+    }
+}
+
 impl fmt::Display for PhysicalDrivePath {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, r"\\.\PhysicalDrive{}", self.0.get())
@@ -517,6 +553,61 @@ mod tests {
         assert_eq!(
             std::format!("{}", PhysicalDiskNumber::new(7).device_path()),
             r"\\.\PhysicalDrive7"
+        );
+    }
+
+    #[test]
+    fn writes_nul_terminated_physical_drive_paths() {
+        let mut buffer = [0u8; PHYSICAL_DRIVE_PATH_CAPACITY];
+
+        assert_eq!(
+            PhysicalDiskNumber::new(0)
+                .device_path()
+                .write_cstr(&mut buffer),
+            Some(18)
+        );
+        assert_eq!(
+            core::ffi::CStr::from_bytes_with_nul(&buffer[..19])
+                .expect("path must be nul-terminated")
+                .to_bytes(),
+            br"\\.\PhysicalDrive0"
+        );
+
+        assert_eq!(
+            PhysicalDiskNumber::new(63)
+                .device_path()
+                .write_cstr(&mut buffer),
+            Some(19)
+        );
+        assert_eq!(
+            core::ffi::CStr::from_bytes_with_nul(&buffer[..20])
+                .expect("path must be nul-terminated")
+                .to_bytes(),
+            br"\\.\PhysicalDrive63"
+        );
+
+        assert_eq!(
+            PhysicalDiskNumber::new(u32::MAX)
+                .device_path()
+                .write_cstr(&mut buffer),
+            Some(27)
+        );
+        assert_eq!(
+            core::ffi::CStr::from_bytes_with_nul(&buffer[..28])
+                .expect("path must be nul-terminated")
+                .to_bytes(),
+            br"\\.\PhysicalDrive4294967295"
+        );
+    }
+
+    #[test]
+    fn rejects_undersized_physical_drive_path_buffers() {
+        let mut tiny = [0u8; 10];
+        assert_eq!(
+            PhysicalDiskNumber::new(7)
+                .device_path()
+                .write_cstr(&mut tiny),
+            None
         );
     }
 }

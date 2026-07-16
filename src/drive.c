@@ -223,10 +223,12 @@ out:
 char* GetPhysicalName(DWORD DriveIndex)
 {
 	BOOL success = FALSE;
-	char physical_name[24];
+	char physical_name[RUFUS_PHYSICAL_DRIVE_PATH_CAPACITY];
 
 	CheckDriveIndex(DriveIndex);
-	static_sprintf(physical_name, "\\\\.\\PhysicalDrive%lu", DriveIndex);
+	if (rufus_format_physical_drive_path((uint32_t)DriveIndex, physical_name,
+		sizeof(physical_name)) < 0)
+		goto out;
 	success = TRUE;
 out:
 	return (success)?safe_strdup(physical_name):NULL;

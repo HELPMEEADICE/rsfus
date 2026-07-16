@@ -2,9 +2,13 @@
 
 #![no_std]
 
-use rufus_core::{PhysicalDiskNumber, UiDriveIndex};
+use core::ffi::c_char;
+use core::slice;
+
+use rufus_core::{PHYSICAL_DRIVE_PATH_CAPACITY, PhysicalDiskNumber, UiDriveIndex};
 
 pub const INVALID_PHYSICAL_DRIVE: i32 = -1;
+pub const PHYSICAL_DRIVE_PATH_CAPACITY_C: usize = PHYSICAL_DRIVE_PATH_CAPACITY;
 
 #[allow(
     unsafe_code,
@@ -15,6 +19,35 @@ pub extern "C" fn rufus_decode_ui_drive_index(ui_drive_index: u32) -> i32 {
     match UiDriveIndex::try_from(ui_drive_index) {
         Ok(index) => PhysicalDiskNumber::from(index).get() as i32,
         Err(_) => INVALID_PHYSICAL_DRIVE,
+    }
+}
+
+/// Format `\\.\PhysicalDriveN` into a caller-provided buffer.
+///
+/// Returns the number of path bytes written (excluding the trailing NUL), or
+/// `-1` when `buffer` is null or shorter than needed.
+#[allow(
+    unsafe_code,
+    reason = "C callers pass a writable path buffer that must be filled in place"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_format_physical_drive_path(
+    physical_disk_number: u32,
+    buffer: *mut c_char,
+    buffer_len: usize,
+) -> i32 {
+    if buffer.is_null() || buffer_len == 0 {
+        return -1;
+    }
+
+    // SAFETY: the C caller provides a writable buffer of `buffer_len` bytes.
+    let bytes = unsafe { slice::from_raw_parts_mut(buffer.cast::<u8>(), buffer_len) };
+    match PhysicalDiskNumber::new(physical_disk_number)
+        .device_path()
+        .write_cstr(bytes)
+    {
+        Some(path_len) => path_len as i32,
+        None => -1,
     }
 }
 
@@ -72,5 +105,31 @@ mod tests {
                 INVALID_PHYSICAL_DRIVE
             );
         }
+    }
+
+    #[test]
+    fn formats_physical_drive_paths_for_c_callers() {
+        let mut buffer = [0u8; PHYSICAL_DRIVE_PATH_CAPACITY_C];
+        let written = rufus_format_physical_drive_path(7, buffer.as_mut_ptr().cast(), buffer.len());
+        assert_eq!(written, 18);
+        assert_eq!(
+            core::ffi::CStr::from_bytes_with_nul(&buffer[..19])
+                .expect("path must be nul-terminated")
+                .to_bytes(),
+            br"\\.\PhysicalDrive7"
+        );
+    }
+
+    #[test]
+    fn rejects_null_or_undersized_path_buffers() {
+        let mut tiny = [0u8; 4];
+        assert_eq!(
+            rufus_format_physical_drive_path(7, core::ptr::null_mut(), 32),
+            -1
+        );
+        assert_eq!(
+            rufus_format_physical_drive_path(7, tiny.as_mut_ptr().cast(), tiny.len()),
+            -1
+        );
     }
 }
