@@ -41,6 +41,7 @@
 #include "settings.h"
 #include "msapi_utf8.h"
 #include "localization.h"
+#include "rufus_ffi.h"
 
 #include "drive.h"
 #include "dev.h"
@@ -902,7 +903,13 @@ BOOL GetDevices(DWORD devnum)
 			if (drive_number < 0)
 				continue;
 
-			drive_index = drive_number + DRIVE_INDEX_MIN;
+			{
+				int32_t encoded_drive_index =
+					rufus_encode_ui_drive_index((uint32_t)drive_number);
+				if (encoded_drive_index == RUFUS_INVALID_UI_DRIVE_INDEX)
+					continue;
+				drive_index = (DWORD)encoded_drive_index;
+			}
 			if (!IsMediaPresent(drive_index)) {
 				uprintf("Device eliminated because it appears to contain no media");
 				safe_free(devint_detail_data);

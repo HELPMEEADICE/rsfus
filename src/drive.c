@@ -368,8 +368,9 @@ char* GetLogicalName(DWORD DriveIndex, uint64_t PartitionOffset, BOOL bKeepTrail
 	if (i < found_name.Index) {
 		ret = safe_strdup(found_name.String[i]);
 	} else {
-		// NB: We need to re-add DRIVE_INDEX_MIN for this call since CheckDriveIndex() subtracted it
-		ret = AltGetLogicalName(DriveIndex + DRIVE_INDEX_MIN, PartitionOffset, bKeepTrailingBackslash, bSilent);
+		// NB: re-encode the physical disk number for the UI-index-based helper
+		ret = AltGetLogicalName((DWORD)rufus_encode_ui_drive_index(DriveIndex),
+			PartitionOffset, bKeepTrailingBackslash, bSilent);
 		if ((ret != NULL) && (strchr(ret, ' ') != NULL))
 			uprintf("WARNING: Using physical device to access partition data");
 	}
@@ -1185,7 +1186,8 @@ static BOOL _GetDriveLettersAndType(DWORD DriveIndex, char* drive_letters, UINT*
 	// Devices that don't have mounted partitions require special
 	// handling to determine if they are fixed or removable.
 	if ((drives_found == 0) && (drive_type != NULL)) {
-		hPhysical = GetPhysicalHandle(DriveIndex + DRIVE_INDEX_MIN, FALSE, FALSE, FALSE);
+		hPhysical = GetPhysicalHandle((DWORD)rufus_encode_ui_drive_index(DriveIndex),
+			FALSE, FALSE, FALSE);
 		r = DeviceIoControl(hPhysical, IOCTL_DISK_GET_DRIVE_GEOMETRY_EX, NULL, 0, geometry, sizeof(geometry), &size, NULL);
 		safe_closehandle(hPhysical);
 		if (r && size > 0) {

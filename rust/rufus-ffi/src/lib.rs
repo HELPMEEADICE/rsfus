@@ -8,6 +8,7 @@ use core::slice;
 use rufus_core::{PHYSICAL_DRIVE_PATH_CAPACITY, PhysicalDiskNumber, UiDriveIndex};
 
 pub const INVALID_PHYSICAL_DRIVE: i32 = -1;
+pub const INVALID_UI_DRIVE_INDEX: i32 = -1;
 pub const PHYSICAL_DRIVE_PATH_CAPACITY_C: usize = PHYSICAL_DRIVE_PATH_CAPACITY;
 
 #[allow(
@@ -19,6 +20,22 @@ pub extern "C" fn rufus_decode_ui_drive_index(ui_drive_index: u32) -> i32 {
     match UiDriveIndex::try_from(ui_drive_index) {
         Ok(index) => PhysicalDiskNumber::from(index).get() as i32,
         Err(_) => INVALID_PHYSICAL_DRIVE,
+    }
+}
+
+/// Encode a Windows physical disk number into the existing Rufus UI index space.
+///
+/// Returns the UI index on success, or `-1` when the physical disk is outside
+/// the supported `[0, 64)` table used by the C UI.
+#[allow(
+    unsafe_code,
+    reason = "the symbol must have a stable name for the C linker"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_encode_ui_drive_index(physical_disk_number: u32) -> i32 {
+    match UiDriveIndex::try_from(PhysicalDiskNumber::new(physical_disk_number)) {
+        Ok(index) => index.get() as i32,
+        Err(_) => INVALID_UI_DRIVE_INDEX,
     }
 }
 
@@ -103,6 +120,30 @@ mod tests {
             assert_eq!(
                 rufus_decode_ui_drive_index(ui_index),
                 INVALID_PHYSICAL_DRIVE
+            );
+        }
+    }
+
+    #[test]
+    fn encodes_every_supported_physical_disk_number() {
+        for physical_disk in 0..64 {
+            assert_eq!(
+                rufus_encode_ui_drive_index(physical_disk),
+                (0x80 + physical_disk) as i32
+            );
+            assert_eq!(
+                rufus_decode_ui_drive_index(0x80 + physical_disk),
+                physical_disk as i32
+            );
+        }
+    }
+
+    #[test]
+    fn rejects_physical_disk_numbers_outside_the_ui_table() {
+        for physical_disk in [64, 65, u32::MAX] {
+            assert_eq!(
+                rufus_encode_ui_drive_index(physical_disk),
+                INVALID_UI_DRIVE_INDEX
             );
         }
     }
