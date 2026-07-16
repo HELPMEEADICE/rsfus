@@ -1077,7 +1077,7 @@ BOOL GetDevices(DWORD devnum)
 	// Adjust the Dropdown width to the maximum text size
 	SendMessage(hDeviceList, CB_SETDROPPEDWIDTH, (WPARAM)maxwidth, 0);
 
-	if (devnum >= DRIVE_INDEX_MIN) {
+	if (rufus_is_valid_ui_drive_index(devnum)) {
 		for (i = 0; i < ComboBox_GetCount(hDeviceList); i++) {
 			if ((DWORD)ComboBox_GetItemData(hDeviceList, i) == devnum) {
 				found = TRUE;

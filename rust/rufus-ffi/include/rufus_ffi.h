@@ -17,6 +17,7 @@ extern "C" {
 
 int32_t rufus_decode_ui_drive_index(uint32_t ui_drive_index);
 int32_t rufus_encode_ui_drive_index(uint32_t physical_disk_number);
+int32_t rufus_is_valid_ui_drive_index(uint32_t ui_drive_index);
 int32_t rufus_format_physical_drive_path(uint32_t physical_disk_number,
 	char* buffer, size_t buffer_len);
 int32_t rufus_is_drive_large_enough(uint64_t disk_size);

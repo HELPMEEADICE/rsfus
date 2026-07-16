@@ -44,6 +44,16 @@ pub extern "C" fn rufus_encode_ui_drive_index(physical_disk_number: u32) -> i32 
     }
 }
 
+/// Return `1` when `ui_drive_index` is inside the existing Rufus UI table.
+#[allow(
+    unsafe_code,
+    reason = "the symbol must have a stable name for the C linker"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_is_valid_ui_drive_index(ui_drive_index: u32) -> i32 {
+    i32::from(UiDriveIndex::try_from(ui_drive_index).is_ok())
+}
+
 /// Format `\\.\PhysicalDriveN` into a caller-provided buffer.
 ///
 /// Returns the number of path bytes written (excluding the trailing NUL), or
@@ -171,6 +181,14 @@ mod tests {
                 INVALID_UI_DRIVE_INDEX
             );
         }
+    }
+
+    #[test]
+    fn validates_ui_drive_indexes() {
+        assert_eq!(rufus_is_valid_ui_drive_index(0x80), 1);
+        assert_eq!(rufus_is_valid_ui_drive_index(0xbf), 1);
+        assert_eq!(rufus_is_valid_ui_drive_index(0x7f), 0);
+        assert_eq!(rufus_is_valid_ui_drive_index(0xc0), 0);
     }
 
     #[test]
