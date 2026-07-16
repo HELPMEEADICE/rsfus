@@ -91,6 +91,10 @@
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</LinkIncremental>
     <LinkIncremental Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</LinkIncremental>
+    <RustTarget Condition="'$(Platform)'=='Win32'">i686-pc-windows-msvc</RustTarget>
+    <RustTarget Condition="'$(Platform)'=='x64'">x86_64-pc-windows-msvc</RustTarget>
+    <RustTarget Condition="'$(Platform)'=='ARM64'">aarch64-pc-windows-msvc</RustTarget>
+    <RustFfiLibrary>$(SolutionDir)target\$(RustTarget)\release\rufus_ffi.lib</RustFfiLibrary>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <BuildLog />
@@ -291,6 +295,15 @@
       <Message>Generating 'embedded.loc' file</Message>
     </PreBuildEvent>
   </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\rust\rufus-ffi\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(RustFfiLibrary);kernel32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <IgnoreSpecificDefaultLibraries>msvcrt.lib;%(IgnoreSpecificDefaultLibraries)</IgnoreSpecificDefaultLibraries>
+    </Link>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="..\src\badblocks.c" />
     <ClCompile Include="..\src\cregex_compile.c" />
@@ -346,6 +359,7 @@
     <ClInclude Include="..\src\libcdio\cdio\udf.h" />
     <ClInclude Include="..\src\localization.h" />
     <ClInclude Include="..\src\localization_data.h" />
+    <ClInclude Include="..\rust\rufus-ffi\include\rufus_ffi.h" />
     <ClInclude Include="..\src\msapi_utf8.h" />
     <ClInclude Include="..\src\dos.h" />
     <ClInclude Include="..\src\registry.h" />
@@ -408,6 +422,9 @@
       <Project>{633cfc82-e01b-4777-bde4-dc0739804332}</Project>
     </ProjectReference>
   </ItemGroup>
+  <Target Name="BuildRustFfi" BeforeTargets="Link">
+    <Exec Command="cargo build --release --locked --package rufus-ffi --target $(RustTarget)" WorkingDirectory="$(SolutionDir)" />
+  </Target>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

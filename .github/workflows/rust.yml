@@ -23,7 +23,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-          targets: i686-pc-windows-gnu, i686-pc-windows-msvc, x86_64-pc-windows-gnu, x86_64-pc-windows-msvc
+          targets: aarch64-pc-windows-msvc, i686-pc-windows-gnu, i686-pc-windows-msvc, x86_64-pc-windows-gnu, x86_64-pc-windows-msvc
       - name: Format
         run: cargo fmt --all --check
       - name: Lint
@@ -32,6 +32,7 @@ jobs:
         run: cargo test --workspace --all-targets
       - name: Build C static libraries
         run: |
+          cargo build --release --package rufus-ffi --target aarch64-pc-windows-msvc
           cargo build --release --package rufus-ffi --target i686-pc-windows-gnu
           cargo build --release --package rufus-ffi --target i686-pc-windows-msvc
           cargo build --release --package rufus-ffi --target x86_64-pc-windows-gnu

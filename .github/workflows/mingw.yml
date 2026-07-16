@@ -59,6 +59,11 @@ jobs:
         fetch-depth: 0
         submodules: recursive
 
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.env }}-pc-windows-gnu
+
     - name: Set ALPHA
       id: set_alpha
       shell: bash

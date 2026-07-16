@@ -39,6 +39,7 @@
 #include "settings.h"
 #include "msapi_utf8.h"
 #include "localization.h"
+#include "rufus_ffi.h"
 
 #include "file.h"
 #include "drive.h"
@@ -123,13 +124,15 @@ BOOL GetAutoMount(BOOL* enabled)
  * Working with drive indexes quite risky (left unchecked,inadvertently passing 0 as
  * index would return a handle to C:, which we might then proceed to unknowingly
  * clear the MBR of!), so we mitigate the risk by forcing our indexes to belong to
- * the specific range [DRIVE_INDEX_MIN; DRIVE_INDEX_MAX].
+ * the specific range [DRIVE_INDEX_MIN; DRIVE_INDEX_MAX).
  */
-#define CheckDriveIndex(DriveIndex) do {                                            \
-	if ((int)DriveIndex < 0) goto out;                                              \
-	assert((DriveIndex >= DRIVE_INDEX_MIN) && (DriveIndex <= DRIVE_INDEX_MAX));     \
-	if ((DriveIndex < DRIVE_INDEX_MIN) || (DriveIndex > DRIVE_INDEX_MAX)) goto out; \
-	DriveIndex -= DRIVE_INDEX_MIN; } while (0)
+#define CheckDriveIndex(DriveIndex) do {                                                \
+	int32_t decoded_drive_index;                                                        \
+	if ((int)DriveIndex < 0) goto out;                                                  \
+	decoded_drive_index = rufus_decode_ui_drive_index((uint32_t)DriveIndex);            \
+	assert(decoded_drive_index != RUFUS_INVALID_PHYSICAL_DRIVE);                        \
+	if (decoded_drive_index == RUFUS_INVALID_PHYSICAL_DRIVE) goto out;                  \
+	DriveIndex = (DWORD)decoded_drive_index; } while (0)
 
 /*
  * Open a drive or volume with optional write and lock access

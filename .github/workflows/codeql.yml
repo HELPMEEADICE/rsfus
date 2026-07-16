@@ -53,6 +53,11 @@ jobs:
       with:
         msbuild-architecture: x64
 
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-pc-windows-msvc
+
     - name: Build 
       run: msbuild ${{env.SOLUTION_FILE_PATH}} /m /p:Configuration=${{ env.BUILD_CONFIGURATION}},Platform=${{ env.TARGET_PLATFORM }}
 
