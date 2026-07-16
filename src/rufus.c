@@ -45,6 +45,7 @@
 #include "resource.h"
 #include "msapi_utf8.h"
 #include "localization.h"
+#include "rufus_ffi.h"
 
 #include "ui.h"
 #include "vhd.h"
@@ -1528,7 +1529,8 @@ static DWORD WINAPI BootCheckThread(LPVOID param)
 			goto out;
 		}
 		/* Add 4 KB extra margin for VHD footers and so on */
-		if ((size_check) && (img_report.projected_size > ((uint64_t)SelectedDrive.DiskSize + 4 * KB))) {
+		if ((size_check) &&
+			(!rufus_image_fits_target(img_report.projected_size, (uint64_t)SelectedDrive.DiskSize))) {
 			// This ISO image is too big for the selected target
 			Notification(MB_OK | MB_ICONERROR, lmprintf(MSG_088), lmprintf(MSG_089));
 			goto out;

@@ -5,11 +5,16 @@
 use core::ffi::c_char;
 use core::slice;
 
-use rufus_core::{PHYSICAL_DRIVE_PATH_CAPACITY, PhysicalDiskNumber, UiDriveIndex};
+use rufus_core::{
+    IMAGE_FOOTER_MARGIN, MIN_TARGET_SIZE, PHYSICAL_DRIVE_PATH_CAPACITY, PhysicalDiskNumber,
+    UiDriveIndex, image_fits_target, is_drive_large_enough,
+};
 
 pub const INVALID_PHYSICAL_DRIVE: i32 = -1;
 pub const INVALID_UI_DRIVE_INDEX: i32 = -1;
 pub const PHYSICAL_DRIVE_PATH_CAPACITY_C: usize = PHYSICAL_DRIVE_PATH_CAPACITY;
+pub const MIN_TARGET_SIZE_C: u64 = MIN_TARGET_SIZE;
+pub const IMAGE_FOOTER_MARGIN_C: u64 = IMAGE_FOOTER_MARGIN;
 
 #[allow(
     unsafe_code,
@@ -66,6 +71,26 @@ pub extern "C" fn rufus_format_physical_drive_path(
         Some(path_len) => path_len as i32,
         None => -1,
     }
+}
+
+/// Return `1` when `disk_size` meets Rufus' existing 8 MiB listing threshold.
+#[allow(
+    unsafe_code,
+    reason = "the symbol must have a stable name for the C linker"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_is_drive_large_enough(disk_size: u64) -> i32 {
+    i32::from(is_drive_large_enough(disk_size))
+}
+
+/// Return `1` when `projected_size` fits `disk_size` plus the VHD footer margin.
+#[allow(
+    unsafe_code,
+    reason = "the symbol must have a stable name for the C linker"
+)]
+#[unsafe(no_mangle)]
+pub extern "C" fn rufus_image_fits_target(projected_size: u64, disk_size: u64) -> i32 {
+    i32::from(image_fits_target(projected_size, disk_size))
 }
 
 #[cfg(not(test))]
@@ -171,6 +196,25 @@ mod tests {
         assert_eq!(
             rufus_format_physical_drive_path(7, tiny.as_mut_ptr().cast(), tiny.len()),
             -1
+        );
+    }
+
+    #[test]
+    fn reports_the_existing_drive_size_threshold() {
+        assert_eq!(rufus_is_drive_large_enough(MIN_TARGET_SIZE_C - 1), 0);
+        assert_eq!(rufus_is_drive_large_enough(MIN_TARGET_SIZE_C), 1);
+    }
+
+    #[test]
+    fn reports_whether_an_image_fits_with_the_footer_margin() {
+        let disk = 16 * 1024 * 1024;
+        assert_eq!(
+            rufus_image_fits_target(disk + IMAGE_FOOTER_MARGIN_C, disk),
+            1
+        );
+        assert_eq!(
+            rufus_image_fits_target(disk + IMAGE_FOOTER_MARGIN_C + 1, disk),
+            0
         );
     }
 }

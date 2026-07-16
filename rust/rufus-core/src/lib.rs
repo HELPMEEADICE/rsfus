@@ -13,6 +13,18 @@ pub const MIN_TARGET_SIZE: u64 = 8 * 1024 * 1024;
 /// Rufus permits this margin when comparing an image with its target.
 pub const IMAGE_FOOTER_MARGIN: u64 = 4 * 1024;
 
+/// Whether a candidate target is large enough to appear in the device list.
+#[must_use]
+pub const fn is_drive_large_enough(disk_size: u64) -> bool {
+    disk_size >= MIN_TARGET_SIZE
+}
+
+/// Whether a source image fits the selected target, including the VHD footer margin.
+#[must_use]
+pub const fn image_fits_target(projected_size: u64, disk_size: u64) -> bool {
+    projected_size <= disk_size.saturating_add(IMAGE_FOOTER_MARGIN)
+}
+
 const UI_DRIVE_INDEX_OFFSET: u32 = 0x80;
 const MAX_DRIVES: u32 = 0x40;
 
@@ -326,7 +338,7 @@ pub fn authorize_write<'id>(
     if plan.target.contains_system_volume || observed_target.contains_system_volume {
         return Err(WriteRejection::SystemDisk);
     }
-    if observed_target.disk_size < MIN_TARGET_SIZE {
+    if !is_drive_large_enough(observed_target.disk_size) {
         return Err(WriteRejection::TargetTooSmall);
     }
     if plan
@@ -335,12 +347,10 @@ pub fn authorize_write<'id>(
     {
         return Err(WriteRejection::SourceOnTarget);
     }
-    if plan.source.is_some_and(|source| {
-        source.projected_size
-            > observed_target
-                .disk_size
-                .saturating_add(IMAGE_FOOTER_MARGIN)
-    }) {
+    if plan
+        .source
+        .is_some_and(|source| !image_fits_target(source.projected_size, observed_target.disk_size))
+    {
         return Err(WriteRejection::ImageTooLarge);
     }
     if !user_confirmed {
@@ -554,6 +564,24 @@ mod tests {
             std::format!("{}", PhysicalDiskNumber::new(7).device_path()),
             r"\\.\PhysicalDrive7"
         );
+    }
+
+    #[test]
+    fn enforces_the_existing_minimum_drive_size() {
+        assert!(!is_drive_large_enough(MIN_TARGET_SIZE - 1));
+        assert!(is_drive_large_enough(MIN_TARGET_SIZE));
+    }
+
+    #[test]
+    fn enforces_the_existing_image_footer_margin() {
+        assert!(image_fits_target(
+            DISK_SIZE + IMAGE_FOOTER_MARGIN,
+            DISK_SIZE
+        ));
+        assert!(!image_fits_target(
+            DISK_SIZE + IMAGE_FOOTER_MARGIN + 1,
+            DISK_SIZE
+        ));
     }
 
     #[test]

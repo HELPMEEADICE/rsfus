@@ -916,8 +916,9 @@ BOOL GetDevices(DWORD devnum)
 				break;
 			}
 			drive_size = GetDriveSize(drive_index);
-			if (drive_size < MIN_DRIVE_SIZE) {
-				uprintf("Device eliminated because it is smaller than %s", SizeToHumanReadable(MIN_DRIVE_SIZE, FALSE, FALSE));
+			if (!rufus_is_drive_large_enough(drive_size)) {
+				uprintf("Device eliminated because it is smaller than %s",
+					SizeToHumanReadable(RUFUS_MIN_TARGET_SIZE, FALSE, FALSE));
 				safe_free(devint_detail_data);
 				break;
 			}
